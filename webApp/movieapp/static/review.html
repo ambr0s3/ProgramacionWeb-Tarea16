@@ -1,0 +1,265 @@
+<html>
+<head>
+  <!-- Latest compiled and minified CSS -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+  <link rel="stylesheet" href="css/awesomplete.css">
+  <style>
+    .box {
+      width: 300px;
+      margin: 0 auto;
+    }
+    p {
+      margin-left: 30px;
+    }
+  </style>
+  <script src="js/awesomplete.js"></script>
+</head>
+<body>
+  <br />
+    <p id="reviewsLink">Listado de peliculas calificadas. <a href="reviews.html"><b>Click aqui.</b></a></p>
+  <div id="container" class="container">
+    <div class="box">
+      <form class="form-horizontal" id="send">
+        <div class="form-group" id="movieBox">
+          <label for="movieName">Pelicula</label><br />
+          <input type="text" id="movies" class="form-control" placeholder=" " oninput="fillList(this.value)" required>
+        </div>
+        <div class="form-group" id="userBox">
+          <label for="username">Usuario</label>
+          <input type="text" class="form-control" id="username" placeholder=" " required>
+        </div>
+        <div class="form-group" id="reviewBox">
+          <label for="review">Testimonio</label>
+          <textarea id="review" class="form-control" rows="3" required></textarea>
+        </div>
+        <span id="rangeVal">1</span>
+        <input id="rangeSlider" type="range" min="1" max="5" step="1" oninput="showVal(this.value)" onchange="showVal(this.value)" required>
+        <br>
+        <button type="submit" class="btn btn-default">Enviar</button>
+      </form>
+    </div>
+  </div>
+  <script>
+      var validMovie;
+      var href = window.location.origin + "/" + window.location.pathname.split("/")[1];
+      var cache = []
+      var list = []
+      var input = document.getElementById("movies");
+      var awesomplete = new Awesomplete(input);
+      var slider = document.getElementById("rangeSlider");
+      slider.defaultValue = 1;
+
+      function showVal(value) {
+        var elm = document.getElementById("rangeVal")
+        elm.innerHTML = value;
+      }
+
+      var movieInput = document.getElementById("movies");
+      movies.onblur = function(event) {
+        if(this.value.length > 0 && list.indexOf(this.value) <= 1) {
+          showAlert();
+        }
+      }
+
+      function getMovies(movieName) {
+        return new Promise(function(resolve, reject) {
+          var movies = dbSearch(movieName);
+          movies.then(function(value) {
+            if(value.length === 0) {
+               console.log("Peliculas del API");
+               get(movieName, 1).then(function(result) {
+                moviesByTitle = result.filter(movie => {
+                  if(movie.title.toLowerCase().startsWith(movieName.toLowerCase())) {
+                    return movie;
+                  }
+                });
+                if(moviesByTitle.length !== 0) {
+                  addMovies(moviesByTitle);
+                }
+                resolve(moviesByTitle);
+               });
+            } else {
+              console.log("Peliculas de la BD");
+              resolve(value);
+            }
+          });
+        });
+      }
+
+      function checkList(movieTitle) {
+        for (var i = 0; i < list.length; i++) {
+          if(list[i].toLowerCase() === movieTitle.toLowerCase()) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function validateAgainstList (movieName) {
+        for (var i = 0; i < list.length; i++) {
+          if(list[i].toLowerCase().indexOf(movieName.toLowerCase()) > -1) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function fillList(movieName) {
+        if(movieName.length >= 2) {
+          if(cache.indexOf(movieName.toLowerCase()) === -1) {
+            cache.push(movieName.toLowerCase())
+            movies = getMovies(movieName);
+            movies.then(function(result) {
+              if(result.length > 0) {
+                for(var i = 0; i < result.length; i++) {
+                  if(!checkList(result[i].title)) {
+                    list.push(result[i].title);
+                  }
+                }
+                awesomplete.list = list;
+              }
+              toggleAlert(movieName);
+            });
+          } else {
+            toggleAlert(movieName);
+          }
+        }
+      }
+
+      function showAlert () {
+        validMovie = false;
+        var alerts = document.getElementsByClassName("alert-danger");
+          if(alerts.length === 0) {
+            var container = document.getElementById("container");
+            var alert = document.createElement("div");
+            alert.classList.add("alert", "alert-danger");
+            alert.innerHTML = "Nombre de pelicula no valido, intente nuevamente."
+            container.appendChild(alert);
+          }
+      }
+
+      function hideAlert() {
+        validMovie = true;
+        var alerts = document.getElementsByClassName("alert-danger");
+        if(alerts.length > 0) {
+          var container = document.getElementById('container');
+          container.removeChild(container.lastChild);
+        }
+      }
+
+      function toggleAlert(movieName) {
+        if(movieName.length >= 2 && !validateAgainstList(movieName)) {
+          showAlert();
+        } 
+        if(movieName.length >= 2 && validateAgainstList(movieName)) {
+          hideAlert();
+        }
+      }
+
+      function dbSearch(searchTerm) {
+        return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', href + "/movies/search/?query=" + searchTerm, true);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+          if (this.readyState == 4 && this.status == 200) {
+            resolve(JSON.parse(this.responseText));
+          }
+          if (this.readyState == 4 && this.status == 404) {
+            reject("Error con la conexion");
+          }
+        }
+      });
+    }
+
+      function addMovies(movies) {
+        console.log("Agregando peliculas");
+        var data = { movies: movies }
+        var xmlhttp = new XMLHttpRequest();
+        xmlhttp.open("POST", href + "/movies", true);
+        xmlhttp.setRequestHeader("Content-Type", "application/json");
+        xmlhttp.send(JSON.stringify(data));
+      }
+
+      function get(movieName, pageNumber) {
+        return new Promise(function(resolve, reject) {
+          var xmlhttp = new XMLHttpRequest();
+          var apiKey = "973b8eba5939bf1d117c6aeb0bc4e86d";
+          var baseUrl = "https://api.themoviedb.org/3/search/movie?api_key=";
+          var movieLanguage = "&language=en-US";
+          var posterUrl = "http://image.tmdb.org/t/p/w150"
+          var noImgPath = "images/noimg.png";
+          var page = "&page=" + pageNumber;
+          var query = "&query=" + movieName;
+          var movies;
+          xmlhttp.open("GET", baseUrl + apiKey + movieLanguage + page + query, true);
+          xmlhttp.send();
+
+          xmlhttp.onreadystatechange = function () {
+            if (this.readyState == 4 && this.status == 200) {
+              data = JSON.parse(this.responseText);
+              movies = data.results;
+              resolve(movies);
+            }
+            if (this.readyState == 4 && this.status == 404) {
+              reject("Connection Error");
+            }
+          }
+        });
+      }
+     
+      function sendReview(movieName, userName, bodyText, rating, userAgent) {
+        var data = new FormData();
+        data.append('title', movieName);
+        data.append('user', userName);
+        data.append('description', bodyText);
+        data.append('rating', rating);
+        data.append('device_id', userAgent);
+
+        var xmlhttp = new XMLHttpRequest();
+        xmlhttp.open("POST", href + "/reviews", true);
+        xmlhttp.send(data);
+        xmlhttp.onreadystatechange = function () {
+            var container = document.getElementById('content');
+            if (this.readyState == 4 && this.status == 200) {
+                console.log(this.response);
+              }
+            else if (this.readyState == 4 && this.status == 404) {
+                console.log("Bad Request");
+            }
+        }
+      }
+
+
+      var form = document.getElementById('send');
+      form.onsubmit = function(evt) {
+        evt.preventDefault();
+        var movieName = document.getElementById('movies');
+        var username = document.getElementById('username');
+        var review = document.getElementById("review");
+        var slider = document.getElementById("rangeSlider");
+        var rangeVal = document.getElementById("rangeVal")
+
+        var userBox = document.getElementById("userBox");
+        var movieBox = document.getElementById("movieBox");
+        var reviewBox = document.getElementById("reviewBox");
+
+        if(!(validMovie && username.value.length && review.value.length && slider.value)) {
+            movieBox.classList.add("has-error");
+            userBox.classList.add("has-error");
+            reviewBox.classList.add("has-error");
+        } else {
+          sendReview(movieName.value, username.value, review.value, slider.value, navigator.userAgent);
+          movieBox.classList.remove("has-error");
+          userBox.classList.remove("has-error");
+          reviewBox.classList.remove("has-error");
+          movieName.value = '';
+          username.value = '';
+          review.value = '';
+          slider.value = 1;
+          rangeVal.innerHTML = '1';
+        }
+      };
+  </script>
+</body>
+</html>
